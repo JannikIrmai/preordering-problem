@@ -1,0 +1,7 @@
+gurobipy==11.0.1
+matplotlib==3.9.0
+networkx==3.4.2
+numpy==2.2.2
+pydot==3.0.4
+torch==2.5.1
+./preorder_odd_closed_walk_separation

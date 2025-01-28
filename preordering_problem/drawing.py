@@ -9,6 +9,12 @@ from matplotlib.backend_bases import KeyEvent, MouseEvent, MouseButton
 class PreorderPlot:
     """
     Interactive drawing of preorder represented as partial order on clusters.
+    This tools allows to:
+
+    - Drag and drop clusters to reposition them.
+    - Toggle/un-toggle display of disagreements by pressing `d`.
+    - Recompute the axis limits by pressing `a`.
+    - Exporting the plot as a tikz graphic by right-clicking on it.
     """
 
     def __init__(self, adjacency, costs, ax=None):
@@ -46,13 +52,12 @@ class PreorderPlot:
                             continue
                         self.disagreement_graph.add_edge(i, j, dis=dis)
 
-        self.cluster_radius = 1
-
         self.fig.canvas.mpl_connect("key_press_event", self.toggle_dis)
         self.fig.canvas.mpl_connect("button_press_event", self.on_click)
         self.fig.canvas.mpl_connect("button_release_event", self.on_release)
         self.fig.canvas.mpl_connect("motion_notify_event", self.on_move)
 
+        self.r = 1
         self.selected_cluster = None
         self.selected_node = None
         self.name = None
@@ -146,10 +151,14 @@ class PreorderPlot:
         i = cluster.index(n)
         a = 2 * np.pi * i / len(cluster)
         cluster_handle = self.transitive_reduction.nodes[c]["handle"]
-        offset = np.array([np.cos(a), np.sin(a)]) * (cluster_handle.radius - self.cluster_radius * 2 / 3) if len(
-            cluster) > 1 \
-            else np.zeros(2)
+        co = self.compute_cluster_orbit(len(cluster))
+        offset = np.array([np.cos(a), np.sin(a)]) * co
         return cluster_handle.center + offset
+
+    def compute_cluster_orbit(self, n):
+        if n == 1:
+            return 0
+        return 2.5 * self.r / np.sqrt(2 - 2 * np.cos(2*np.pi / n))
 
     def plot_clusters(self):
         pos = nx.nx_pydot.graphviz_layout(self.transitive_reduction, prog="dot")
@@ -158,16 +167,17 @@ class PreorderPlot:
 
         dist = np.linalg.norm(pos[:, None, :] - pos[None, :, :], axis=2)
         dist[np.diag_indices_from(dist)] = np.inf
-        self.cluster_radius = dist.min() / 4
+        self.r = dist.min() / 8
 
         for i, cluster in enumerate(self.clustering):
-            cluster_circle = Circle(pos[i], radius=self.cluster_radius * np.sqrt(len(cluster)),
+            co = self.compute_cluster_orbit(len(cluster))
+            cluster_circle = Circle(pos[i], radius=co + self.r * 3 / 2,
                                     facecolor="lightgray", edgecolor="black")
             self.transitive_reduction.nodes[i]["handle"] = cluster_circle
             self.ax.add_artist(cluster_circle)
             for j, n in enumerate(cluster):
                 node_pos = self.get_node_pos(n)
-                node_circle = Circle(node_pos, radius=self.cluster_radius/2, facecolor="white", edgecolor="black")
+                node_circle = Circle(node_pos, radius=self.r, facecolor="white", edgecolor="black")
                 self.ax.add_artist(node_circle)
                 text_handle = self.ax.text(*node_pos, str(n), va="center", ha="center")
                 self.disagreement_graph.nodes[n]["node_handle"] = node_circle
@@ -187,8 +197,8 @@ class PreorderPlot:
     def plot_transitive_reduction(self):
         for i, j in self.transitive_reduction.edges:
             data = self.get_cluster_arc(i, j)
-            arrow = FancyArrow(*data, width=self.cluster_radius/30, color='black',
-                               length_includes_head=True, head_width=self.cluster_radius/5)
+            arrow = FancyArrow(*data, width=self.r / 15, color='black',
+                               length_includes_head=True, head_width=self.r / 3)
             self.ax.add_artist(arrow)
             self.transitive_reduction[i][j]["handle"] = arrow
 
@@ -218,8 +228,8 @@ class PreorderPlot:
                                 linestyle="-" if dis == "pos" else "-", alpha=0.5)[0]
             arrow = FancyArrow(coords[0, -2], coords[1, -2], coords[0, -1] - coords[0, -2],
                                coords[1, -1] - coords[1, -2], color="red",
-                               head_width=self.cluster_radius / 8, length_includes_head=True,
-                               head_length=self.cluster_radius / 5)
+                               head_width=self.r / 4, length_includes_head=True,
+                               head_length=self.r / 3)
             self.ax.add_artist(arrow)
             self.disagreement_graph[i][j]["arrow_handle"] = arrow
             self.disagreement_graph[i][j]["line_handle"] = line
@@ -239,20 +249,29 @@ class PreorderPlot:
                 min_y = handle.center[1] - handle.radius
             if max_y < handle.center[1] + handle.radius:
                 max_y = handle.center[1] + handle.radius
-        pad = self.cluster_radius
+        pad = self.r
         self.ax.set_xlim(min_x - pad, max_x + pad)
         self.ax.set_ylim(min_y - pad, max_y + pad)
 
     def generate_tikz(self, f=None):
+        """
+        Export the plot as a tikz graphic.
+        Define the following tikz styles in order to use the build the exported tikz figure:
+
+        \tikzstyle{cluster}=[circle, inner sep=0pt, outer sep=0pt, draw, fill=black!20!white]
+        \tikzstyle{cluster_arc}=[-{Latex[length=5pt, width=3pt]}, line width=0.8pt]
+        \tikzstyle{disagreement_arc}=[-{Latex[length=4pt, width=3pt]}, line width=0.5pt, red!70!white]
+        :param f: file to write to. If none, prints to console
+        :return:
+        """
 
         print("\\begin{tikzpicture}", file=f)
-        r = self.cluster_radius
-        print(f"\\def\\r{{{r:.3f}}}", file=f)
+        print(f"\\def\\r{{{self.r:.3f}}}", file=f)
 
         for i in self.transitive_reduction.nodes:
             handle = self.transitive_reduction.nodes[i]["handle"]
-            print(f"\\node[cluster, minimum size={2*handle.radius/self.cluster_radius:.3f}*\\r cm] (C{i}) at "
-                  f"({handle.center[0]/r:.3f}*\\r, {handle.center[1]/r:.3f}*\\r) {{}};", file=f)
+            print(f"\\node[cluster, minimum size={2 * handle.radius / self.r:.3f}*\\r cm] (C{i}) at "
+                  f"({handle.center[0] / self.r:.3f}*\\r, {handle.center[1] / self.r:.3f}*\\r) {{}};", file=f)
 
         for ci, cluster in enumerate(self.clustering):
             for i, n in enumerate(cluster):
@@ -260,8 +279,9 @@ class PreorderPlot:
                 d = np.linalg.norm(self.disagreement_graph.nodes[n]["node_handle"].center -
                                    self.transitive_reduction.nodes[ci]["handle"].center)
                 s = self.disagreement_graph.nodes[n]["node_handle"].radius
-                print(f"\\node[vertex, fill=white, shift=({a:.3f}:{d/r:.3f}*\\r cm), minimum size={2*s/r}*\\r cm] ({n})"
-                      f"at (C{ci}) {{\\scriptsize {n}}};", file=f)
+                print(f"\\node[vertex, fill=white, shift=({a:.3f}:{d/self.r:.3f}*\\r cm), "
+                      f"minimum size={2*s/self.r}*\\r cm] ({n})"
+                      f" at (C{ci}) {{\\scriptsize {n}}};", file=f)
 
         for i, j in self.transitive_reduction.edges:
             print(f"\\draw[cluster_arc] (C{i}) -- (C{j});", file=f)

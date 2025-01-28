@@ -4,4 +4,5 @@ networkx==3.4.2
 numpy==2.2.2
 pydot==3.0.4
 torch==2.5.1
+pandas==2.2.3
 ./preorder_odd_closed_walk_separation

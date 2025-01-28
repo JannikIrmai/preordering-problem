@@ -1,3 +1,5 @@
+import os
+
 from preordering_problem.ilp_solver import Preorder
 from preordering_problem.decompose_preorder import decompose_preorder
 import networkx as nx
@@ -14,7 +16,7 @@ The party membership file can be obtained here: https://github.com/JannikIrmai/p
 """
 
 
-data_root = "../../../../datasets/snap-stanford/congress_network"
+data_root = "../../../../datasets/snap-stanford"
 
 
 colors = {
@@ -30,7 +32,7 @@ def load_congress():
     """
     :return: usernames, party membership and weight matrix for US congress graph.
     """
-    with open(f"{data_root}/congress_network_data.json", "r") as f:
+    with open(f"{data_root}/congress_network/congress_network_data.json", "r") as f:
         d = json.load(f)[0]
 
     user_names = d["usernameList"]
@@ -41,7 +43,7 @@ def load_congress():
         weights[i, j] = w
     # load parties
     parties = []
-    with open(f"{data_root}/parties.txt", "r") as f:
+    with open(f"{data_root}/congress_network/parties.txt", "r") as f:
         for i, line in enumerate(f.readlines()):
             name, party = line.strip().split(", ")
             assert name == user_names[i]

@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from decompose_preorder import decompose_preorder
+from preordering_problem.decompose_preorder import decompose_preorder
 import networkx as nx
 from matplotlib.patches import Circle, FancyArrow
 from matplotlib.backend_bases import KeyEvent, MouseEvent, MouseButton

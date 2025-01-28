@@ -6,7 +6,7 @@ def is_transitive(adjacency: torch.tensor) -> bool:
     return adjacency[torch.matmul(adjacency, adjacency) > 0].all()
 
 
-def greedy_additive(costs: torch.Tensor, adjacency: torch.Tensor = None) -> (torch.Tensor, torch.Tensor):
+def greedy_arc_insertion(costs: torch.Tensor, adjacency: torch.Tensor = None) -> (torch.Tensor, torch.Tensor):
     """
     Algorithm 2 from the paper.
 
@@ -78,7 +78,7 @@ def test():
     # NOTE: It is important to use floats instead of double otherwise GPU speedup is small!
 
     t_0 = time()
-    total_cost, adjacency = greedy_additive(costs)
+    total_cost, adjacency = greedy_arc_insertion(costs)
     print(time() - t_0)
     print(total_cost.item())
 

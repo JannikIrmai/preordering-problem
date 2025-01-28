@@ -1,7 +1,6 @@
 import gurobipy
 import numpy as np
 import matplotlib.pyplot as plt
-import networkx as nx
 from time import time
 from preorder_odd_closed_walk_separation import separate
 

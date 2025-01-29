@@ -10,10 +10,12 @@ from preordering_problem.ilp_solver import Preorder
 from preordering_problem.greedy_arc_insertion import greedy_arc_insertion
 from preordering_problem.di_cut_approximation import greedy_di_cut
 from preordering_problem.drawing import PreorderPlot
+from preordering_problem.decompose_preorder import decompose_preorder
 
 
 data_root = "../../../../datasets/snap-stanford"
 t_limit = 500
+max_num_nodes = np.inf
 
 
 def load_ego_network(platform: str, ego_id: int):
@@ -53,7 +55,7 @@ def edges_to_adjacency(edges: list) -> (np.ndarray, list):
     return adjacency, node2id
 
 
-def get_ego_ids_by_num_nodes(platform: str = "twitter"):
+def get_ego_ids_by_num_nodes(platform):
     ego_ids = []
     num_nodes = []
     for filename in os.listdir(f"{data_root}/{platform}"):
@@ -69,14 +71,15 @@ def get_ego_ids_by_num_nodes(platform: str = "twitter"):
     return sorted(zip(num_nodes, ego_ids))
 
 def create_dataframe(platform):
-    filename = f"{platform}_results.csv"
+    filename = f"results/{platform}.csv"
     if os.path.exists(filename):
         print(f"File '{filename}' already exists")
         return
 
     ego_ids_and_num = get_ego_ids_by_num_nodes(platform)
+    ego_ids_and_num = [(num, ego_id) for num, ego_id in ego_ids_and_num if num <= max_num_nodes]
     ego_ids = [ego_id for num, ego_id in ego_ids_and_num]
-    ilp_algorithms = ["Preordering ILP", "Clustering ILP", "Partial Ordering ILP"]
+    ilp_algorithms = ["Preordering ILP", "Clustering ILP", "Partial Ordering ILP", "Successive ILPs"]
     other_algorithms = ["LP", "LP+OCW", "GDC", "GAI", "GDC+GAI"]
     columns = ["|V|", "|E|"]
     for ilp in ilp_algorithms:
@@ -93,7 +96,7 @@ def create_dataframe(platform):
 
 def solve_preorder_ilp(platform, method="ILP"):
 
-    filename = f"{platform}_results.csv"
+    filename = f"results/{platform}.csv"
     df = pd.read_csv(filename, index_col=0)
 
     for i, ego_id in enumerate(df.index):
@@ -104,36 +107,66 @@ def solve_preorder_ilp(platform, method="ILP"):
 
         print(i, ego_id, df.loc[ego_id, "|V|"], end=" ")
 
-        edges = load_ego_network("twitter", ego_id)
+        edges = load_ego_network(platform, ego_id)
         adjacency, nodes = edges_to_adjacency(edges)
         cost = - np.ones_like(adjacency) + 2*adjacency
         cost[np.diag_indices_from(cost)] = 0
 
         preorder = Preorder(cost, binary=True, suppress_log=True, lazy=True)
 
-        if method == "Preordering ILP":
-            gdc_obj, gdc_sol = greedy_di_cut(cost)
-            gdc_ga_obj, gdc_ga_sol = greedy_arc_insertion(torch.Tensor(cost), torch.Tensor(gdc_sol))
-            preorder.set_solution(gdc_ga_sol.numpy())
-        elif method == "Clustering ILP":
-            preorder.add_symmetric_constraints()
-        elif method == "Partial Ordering ILP":
-            preorder.add_symmetric_constraints()
-            gdc_obj, gdc_sol = greedy_di_cut(cost)
-            preorder.set_solution(gdc_sol)
-        else:
-            raise ValueError(f"Unknown method: {method}")
-
-        try:
+        if method == "Successive ILPs":
+            if not df.loc[ego_id, "Clustering ILP Gap"] <= 1e-3:
+                print(f"Clustering for {i}, {ego_id} not solved yet.")
+                continue
             t_0 = time()
-            obj = preorder.solve(time_limit=t_limit)
+            # Step 1: solve clustering
+            clustering = Preorder(cost, binary=True, suppress_log=True, lazy=True)
+            clustering.add_symmetric_constraints()
+            cluster_obj = clustering.solve()
+            if clustering.model.MIPGap > 1e-3:
+                raise ValueError("Clustering not optimal!")
+            _, clust = decompose_preorder(clustering.get_variable_values())
+            # Step 2: contract clusters
+            contracted_costs = np.zeros((len(clust), len(clust)), dtype=cost.dtype)
+            for i in range(len(clust)):
+                for j in range(len(clust)):
+                    if i == j:
+                        continue
+                    contracted_costs[i, j] = cost[clust[i]][:, clust[j]].sum()
+            # Step 3: solve partial ordering
+            preorder = Preorder(contracted_costs, binary=True, suppress_log=True, lazy=True)
+            preorder.add_symmetric_constraints()
+            preorder_obj = preorder.solve()
+            if preorder.model.MIPGap > 1e-3:
+                raise ValueError("Clustering not optimal!")
+            obj = cluster_obj + preorder_obj
             t = time() - t_0
-            gap = preorder.model.MIPGap
-        except AttributeError as e:
-            print(e)
-            t = t_limit
-            obj = 0
-            gap = np.inf
+            gap = 0
+        else:
+            if method == "Preordering ILP":
+                gdc_obj, gdc_sol = greedy_di_cut(cost)
+                gdc_ga_obj, gdc_ga_sol = greedy_arc_insertion(torch.Tensor(cost), torch.Tensor(gdc_sol))
+                preorder.set_solution(gdc_ga_sol.numpy())
+            elif method == "Clustering ILP":
+                preorder.add_symmetric_constraints()
+            elif method == "Partial Ordering ILP":
+                preorder.add_symmetric_constraints()
+                gdc_obj, gdc_sol = greedy_di_cut(cost)
+                preorder.set_solution(gdc_sol)
+            else:
+                raise ValueError(f"Unknown method: {method}")
+
+            try:
+                t_0 = time()
+                obj = preorder.solve(time_limit=t_limit)
+                t = time() - t_0
+                gap = preorder.model.MIPGap
+            except AttributeError as e:
+                print(e)
+                t = t_limit
+                obj = 0
+                gap = np.inf
+
         df.loc[ego_id, f"{method}"] = obj
         df.loc[ego_id, f"{method} T"] = t
         df.loc[ego_id, f"{method} Gap"] = gap
@@ -142,7 +175,7 @@ def solve_preorder_ilp(platform, method="ILP"):
 
 
 def compute_lp_bounds(platform, ocw=False):
-    filename = f"{platform}_results.csv"
+    filename = f"results/{platform}.csv"
     method = "LP+OCW" if ocw else "LP"
     df = pd.read_csv(filename, index_col=0)
     for i, ego_id in enumerate(df.index):
@@ -151,7 +184,7 @@ def compute_lp_bounds(platform, ocw=False):
             continue
         print(i, ego_id, df.loc[ego_id, "|V|"], end=" ")
 
-        edges = load_ego_network("twitter", ego_id)
+        edges = load_ego_network(platform, ego_id)
         adjacency, _ = edges_to_adjacency(edges)
         cost = - np.ones_like(adjacency) + 2 * adjacency
         cost[np.diag_indices_from(cost)] = 0
@@ -173,14 +206,12 @@ def compute_lp_bounds(platform, ocw=False):
 
 
 def solve_local_search(platform):
-    filename = f"{platform}_results.csv"
+    filename = f"results/{platform}.csv"
     df = pd.read_csv(filename, index_col=0)
 
     for i, ego_id in enumerate(df.index):
         if df.loc[ego_id, "|V|"] == 0:
             continue
-
-        print(i, ego_id)
 
         edges = load_ego_network(platform, ego_id)
         adjacency, _ = edges_to_adjacency(edges)
@@ -259,14 +290,14 @@ def plot_ego_network_results(platform, ego_id):
 
 
 def plot_closed_gap(platform):
-    filename = f"{platform}_results.csv"
+    filename = f"results/{platform}.csv"
     df = pd.read_csv(filename, index_col=0)
 
     opt_idx = df["Preordering ILP Gap"] < 1e-3
     idx = opt_idx & ((df["Preordering ILP"] - df["LP"]).abs() > 1e-3)
     df = df.loc[idx]
 
-    closed_gap = (df["LP"] - df[f"LP+OCW"]) / (df["LP"] - df["Preordering ILP Gap"]) * 100
+    closed_gap = (df["LP"] - df[f"LP+OCW"]) / (df["LP"] - df["Preordering ILP"]) * 100
     print(f"Num LP+OCW results:", (~np.isnan(closed_gap)).sum())
     mean = np.nanmean(closed_gap)
     print("Mean closed gap:", mean)
@@ -279,28 +310,129 @@ def plot_closed_gap(platform):
     ax.set_xlim(0, 100)
     ax.set_ylim(0, hist.max() + 5)
     fig.tight_layout()
-    fig.savefig("closed-gap.png", dpi=300)
+    fig.savefig("results/closed-gap.png", dpi=300)
     plt.show()
 
 
-def main():
+def plot_clustering_vs_ordering_ilp(platform):
+    df = pd.read_csv(f"results/{platform}.csv", index_col=0)
+    cols = ["Preordering ILP", "Partial Ordering ILP", "Clustering ILP", "Successive ILPs"]
+
+    idx = (df[[f"{col} Gap" for col in cols]] <= 1e-3).all(axis=1)
+    df = df.loc[idx]
+
+    print("Means:")
+    print(df.mean())
+    relative = df[cols] / df[["|E|"]].values
+    print("Relative Objectives Means:")
+    print(relative.mean())
+
+    markers = ["+", "x", "1", "3"]
+    color = ["tab:blue", "tab:red", "tab:green", "tab:orange"]
+    fig, ax = plt.subplots(1, 2, figsize=(9, 2.5))
+    for col, m, c in zip(cols, markers, color):
+        ax[0].scatter(df["|V|"], df[f"{col} T"], label=f"{col}", alpha=0.3, color=c, marker=m)
+
+    ax[0].set_xlabel(r"$|V|$")
+    ax[0].set_ylabel("Runtime [s]")
+    ax[0].set_yscale('log')
+    leg = ax[0].legend()
+    for lh in leg.legend_handles:
+        lh.set_alpha(1)
+
+    bplot = ax[1].boxplot(relative, tick_labels=[col.split(" ")[0] for col in cols], widths=0.8)
+    for median, flyer, c, m in zip(bplot["medians"], bplot["fliers"], color, markers):
+        median.set_color(c)
+        flyer.set_markeredgecolor(c)
+        flyer.set_marker(m)
+    ax[1].set_ylabel(r"Objective / $|E|$")
+
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_lower_upper_bound(platform):
+    df = pd.read_csv(f"results/{platform}.csv", index_col=0)
+    upper = "LP"
+    columns = ["GDC", "GAI", "GDC+GAI"]
+    bound = df[["LP", upper]].min(axis=1)
+    gaps = -(df[columns] - bound.values.reshape((-1, 1))) / df[["|E|"]].values
+    print("Num NANs:")
+    print(gaps.isna().sum())
+
+    fig, ax = plt.subplots(3, figsize=(6, 5), sharex=True, sharey=True)
+    lim = 0.3
+    bins = np.linspace(0, lim, int(lim * 100) + 1)
+
+    means = gaps.mean()
+    print("Mean gaps:")
+    print(means)
+
+    max_val = 0
+    for i, col in enumerate(columns):
+        hist = ax[i].hist(gaps[col], bins=bins)[0].max()
+        max_val = max(max_val, hist.max())
+        ax[i].set_ylabel("Count")
+        ax[i].set_title(col)
+    for i, col in enumerate(columns):
+        ax[i].plot([means[col], means[col]], [0, max_val*1.05], color="tab:red")
+
+    ax[-1].set_xlim(0, lim)
+    ax[-1].set_ylim(0, max_val*1.05)
+    ax[-1].set_xlabel("T Gap")
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_local_search_runtime(platform):
+    df = pd.read_csv(f"results/{platform}.csv")
+    fig, ax = plt.subplots(1, figsize=(6, 3), sharex=True)
+    markers = ["+", "x", "1", "x"]
+    names = ["GDC", "GAI", "GDC+GAI"]
+    color = ["tab:blue", "tab:red", "tab:green"]
+    for i, name in enumerate(names):
+        ax.scatter(df["|V|"]**2, df[f"{name} T"], label=name, alpha=0.5, marker=markers[i], color=color[i])
+    ax.set_xscale("log")
+    ax.legend()
+    ax.set_yscale("log")
+    ax.set_xlabel(r"$|V_2|$")
+    ax.set_ylabel(r"time [s]")
+    fig.tight_layout()
+
+    transitivity_idx = df[names[:3]] / df[["|E|"]].values
+    print("Mean transitivity index")
+    print(transitivity_idx.mean())
+
+    plt.show()
+
+
+def main(platform):
     """
-    Un-comment the lines below to run the specific algorithms
+    Un-comment the lines below to run the specific algorithms.
     :return:
     """
-    platform = "twitter"
+    if not os.path.isdir("results"):
+        os.mkdir("results")
+
     create_dataframe(platform)
-    solve_preorder_ilp(platform, "Preordering ILP")
+    # solve_preorder_ilp(platform, "Preordering ILP")
     # solve_preorder_ilp(platform, "Clustering ILP")
     # solve_preorder_ilp(platform, "Partial Ordering ILP")
-    compute_lp_bounds(platform, False)
-    compute_lp_bounds(platform, True)
-    # solve_local_search(platform)
-    plot_closed_gap(platform)
+    # solve_preorder_ilp(platform, "Successive ILPs")
+    # compute_lp_bounds(platform, False)
+    # compute_lp_bounds(platform, True)
+    solve_local_search(platform)
 
-    # plot_ego_network_results("twitter", 215824411)
+    plot_local_search_runtime(platform)
+    # plot_lower_upper_bound(platform)
+    # plot_clustering_vs_ordering_ilp(platform)
+    # plot_closed_gap(platform)
 
 
 if __name__ == "__main__":
-    main()
+    # Run experiments
+    max_num_nodes = 200
+    main("gplus")
+    # Plot results of one single network
+    plot_ego_network_results("twitter", 215824411)
 

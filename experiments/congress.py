@@ -1,10 +1,14 @@
-from preordering_problem.ilp_solver import Preorder
-from preordering_problem.decompose_preorder import decompose_preorder
 import networkx as nx
 import json
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton, MouseEvent
+
+import sys
+sys.path.append('../')
+
+from preordering_problem.ilp_solver import Preorder
+from preordering_problem.decompose_preorder import decompose_preorder
 
 
 """

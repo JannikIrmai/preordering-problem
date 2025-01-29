@@ -6,11 +6,20 @@ from time import time
 import networkx as nx
 import matplotlib.pyplot as plt
 
+import sys
+sys.path.append('../')
+
 from preordering_problem.ilp_solver import Preorder
 from preordering_problem.greedy_arc_insertion import greedy_arc_insertion
 from preordering_problem.di_cut_approximation import greedy_di_cut
 from preordering_problem.drawing import PreorderPlot
 from preordering_problem.decompose_preorder import decompose_preorder
+
+
+"""
+Preordering Social networks from https://snap.stanford.edu/data/ego-Twitter.html and
+https://snap.stanford.edu/data/ego-Gplus.html
+"""
 
 
 data_root = "../../../../datasets/snap-stanford"
@@ -92,6 +101,7 @@ def create_dataframe(platform):
         df.loc[ego_id, "|V|"] = num
         df.loc[ego_id, "|E|"] = len(load_ego_network(platform, ego_id))
     df.to_csv(filename)
+    print("Created dataframe")
 
 
 def solve_preorder_ilp(platform, method="ILP"):
@@ -135,7 +145,7 @@ def solve_preorder_ilp(platform, method="ILP"):
                     contracted_costs[i, j] = cost[clust[i]][:, clust[j]].sum()
             # Step 3: solve partial ordering
             preorder = Preorder(contracted_costs, binary=True, suppress_log=True)
-            preorder.add_symmetric_constraints()
+            preorder.add_anti_symmetric_constraints()
             preorder_obj = preorder.solve()
             if preorder.model.MIPGap > 1e-3:
                 raise ValueError("Clustering not optimal!")
@@ -150,7 +160,7 @@ def solve_preorder_ilp(platform, method="ILP"):
             elif method == "Clustering ILP":
                 preorder.add_symmetric_constraints()
             elif method == "Partial Ordering ILP":
-                preorder.add_symmetric_constraints()
+                preorder.add_anti_symmetric_constraints()
                 gdc_obj, gdc_sol = greedy_di_cut(cost)
                 preorder.set_solution(gdc_sol)
             else:
@@ -310,7 +320,6 @@ def plot_closed_gap(platform):
     ax.set_xlim(0, 100)
     ax.set_ylim(0, hist.max() + 5)
     fig.tight_layout()
-    fig.savefig("results/closed-gap.png", dpi=300)
     plt.show()
 
 
@@ -410,7 +419,6 @@ def main(platform):
     """
     Comment out some of the lines below to nur run all algorithms!
     """
-
     create_dataframe(platform)
     solve_preorder_ilp(platform, "Preordering ILP")
     solve_preorder_ilp(platform, "Clustering ILP")
@@ -431,6 +439,6 @@ if __name__ == "__main__":
         os.mkdir("results")
     # Run experiments
     max_num_nodes = 40
-    main("gplus")
+    main("twitter")
     # Plot results of one single network
     plot_ego_network_results("twitter", 215824411)

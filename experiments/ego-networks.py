@@ -408,31 +408,29 @@ def plot_local_search_runtime(platform):
 
 def main(platform):
     """
-    Un-comment the lines below to run the specific algorithms.
-    :return:
+    Comment out some of the lines below to nur run all algorithms!
     """
-    if not os.path.isdir("results"):
-        os.mkdir("results")
 
     create_dataframe(platform)
-    # solve_preorder_ilp(platform, "Preordering ILP")
-    # solve_preorder_ilp(platform, "Clustering ILP")
-    # solve_preorder_ilp(platform, "Partial Ordering ILP")
-    # solve_preorder_ilp(platform, "Successive ILPs")
-    # compute_lp_bounds(platform, False)
-    # compute_lp_bounds(platform, True)
+    solve_preorder_ilp(platform, "Preordering ILP")
+    solve_preorder_ilp(platform, "Clustering ILP")
+    solve_preorder_ilp(platform, "Partial Ordering ILP")
+    solve_preorder_ilp(platform, "Successive ILPs")
+    compute_lp_bounds(platform, False)
+    compute_lp_bounds(platform, True)
     solve_local_search(platform)
 
     plot_local_search_runtime(platform)
-    # plot_lower_upper_bound(platform)
-    # plot_clustering_vs_ordering_ilp(platform)
-    # plot_closed_gap(platform)
+    plot_lower_upper_bound(platform)
+    plot_clustering_vs_ordering_ilp(platform)
+    plot_closed_gap(platform)
 
 
 if __name__ == "__main__":
+    if not os.path.isdir("results"):
+        os.mkdir("results")
     # Run experiments
-    max_num_nodes = 200
+    max_num_nodes = 40
     main("gplus")
     # Plot results of one single network
     plot_ego_network_results("twitter", 215824411)
-

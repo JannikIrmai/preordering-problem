@@ -112,7 +112,7 @@ def solve_preorder_ilp(platform, method="ILP"):
         cost = - np.ones_like(adjacency) + 2*adjacency
         cost[np.diag_indices_from(cost)] = 0
 
-        preorder = Preorder(cost, binary=True, suppress_log=True, lazy=True)
+        preorder = Preorder(cost, binary=True, suppress_log=True)
 
         if method == "Successive ILPs":
             if not df.loc[ego_id, "Clustering ILP Gap"] <= 1e-3:
@@ -120,7 +120,7 @@ def solve_preorder_ilp(platform, method="ILP"):
                 continue
             t_0 = time()
             # Step 1: solve clustering
-            clustering = Preorder(cost, binary=True, suppress_log=True, lazy=True)
+            clustering = Preorder(cost, binary=True, suppress_log=True)
             clustering.add_symmetric_constraints()
             cluster_obj = clustering.solve()
             if clustering.model.MIPGap > 1e-3:
@@ -134,7 +134,7 @@ def solve_preorder_ilp(platform, method="ILP"):
                         continue
                     contracted_costs[i, j] = cost[clust[i]][:, clust[j]].sum()
             # Step 3: solve partial ordering
-            preorder = Preorder(contracted_costs, binary=True, suppress_log=True, lazy=True)
+            preorder = Preorder(contracted_costs, binary=True, suppress_log=True)
             preorder.add_symmetric_constraints()
             preorder_obj = preorder.solve()
             if preorder.model.MIPGap > 1e-3:
@@ -189,7 +189,7 @@ def compute_lp_bounds(platform, ocw=False):
         cost = - np.ones_like(adjacency) + 2 * adjacency
         cost[np.diag_indices_from(cost)] = 0
 
-        preorder = Preorder(cost, binary=False, suppress_log=True, lazy=True)
+        preorder = Preorder(cost, binary=False, suppress_log=True)
         preorder.separate_odd_closed_walk = 9 if ocw else 0
 
         t_0 = time()
@@ -254,16 +254,16 @@ def plot_ego_network_results(platform, ego_id):
     cost[np.diag_indices_from(cost)] = 0
 
     results = []
-    preorder = Preorder(cost, binary=True, lazy=True, suppress_log=True)
+    preorder = Preorder(cost, binary=True, suppress_log=True)
     preorder.solve()
     results.append(preorder.get_variable_values())
 
-    clustering = Preorder(cost, binary=True, lazy=True, suppress_log=True)
+    clustering = Preorder(cost, binary=True, suppress_log=True)
     clustering.add_symmetric_constraints()
     clustering.solve()
     results.append(clustering.get_variable_values())
 
-    partial_order = Preorder(cost, binary=True, lazy=True, suppress_log=True)
+    partial_order = Preorder(cost, binary=True, suppress_log=True)
     partial_order.add_anti_symmetric_constraints()
     partial_order.solve()
     results.append(partial_order.get_variable_values())

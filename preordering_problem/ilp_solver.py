@@ -7,7 +7,7 @@ from preorder_odd_closed_walk_separation import separate
 
 class Preorder:
 
-    def __init__(self, costs: np.ndarray, binary: bool = False, lazy: bool = False, suppress_log=False):
+    def __init__(self, costs: np.ndarray, binary: bool = False, suppress_log=False):
         assert costs.ndim == 2
         assert costs.shape[0] == costs.shape[1]
 
@@ -140,7 +140,7 @@ def example():
     preorder = Preorder(costs, True)
     preorder.solve()
 
-    from drawing import PreorderPlot
+    from preordering_problem.drawing import PreorderPlot
     plotter = PreorderPlot(preorder.get_variable_values(), costs)
     plotter.plot()
     plt.show()

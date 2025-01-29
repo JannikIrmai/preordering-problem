@@ -1,5 +1,3 @@
-import os
-
 from preordering_problem.ilp_solver import Preorder
 from preordering_problem.decompose_preorder import decompose_preorder
 import networkx as nx
@@ -103,7 +101,7 @@ def main():
     costs[np.diag_indices_from(costs)] = 0
 
     # solve preorder problem
-    preorder = Preorder(costs, binary=True, lazy=True, suppress_log=True)
+    preorder = Preorder(costs, binary=True, suppress_log=True)
     preorder_obj = preorder.solve()
     adjacency = preorder.get_variable_values()
     print("Preorder objective:", preorder_obj)
@@ -114,7 +112,7 @@ def main():
     plot_congress(g, clustering, parties, user_names)
 
     # solve clustering problem
-    clustering = Preorder(costs, binary=True, lazy=True, suppress_log=True)
+    clustering = Preorder(costs, binary=True, suppress_log=True)
     clustering.add_symmetric_constraints()
     clustering_obj = clustering.solve()
     print("Clustering objective:", clustering_obj)

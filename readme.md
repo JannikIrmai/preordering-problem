@@ -15,7 +15,7 @@ Free academic licenses can be obtained [here](https://www.gurobi.com/academia/ac
 
 pip install -r requirements.txt
 
-## Usage
+## Usage Example
 
 ```python
 import numpy as np

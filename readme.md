@@ -52,3 +52,5 @@ cd experiments
 python congress.py
 python ego-network.py
 ```
+
+You may want to modfy the `main` function in the scripts to run only some of the experiments.

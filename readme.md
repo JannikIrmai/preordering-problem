@@ -50,7 +50,7 @@ To reproduce the experiments from the article, run the script from the `experime
 ```
 cd experiments
 python congress.py
-python ego-network.py
+python ego_networks.py
 ```
 
 You may want to modfy the `main` function in the scripts to run only some of the experiments.

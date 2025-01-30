@@ -14,7 +14,7 @@ from preordering_problem.decompose_preorder import decompose_preorder
 """
 Preordering Twitter accounts of members of the 117 US congress.
 The data can be downloaded from here: https://snap.stanford.edu/data/congress-twitter.html 
-The party membership file can be obtained here: https://github.com/JannikIrmai/preordering-problem/tree/main/data
+The party membership file is contained in the `data` directory.
 """
 
 

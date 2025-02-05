@@ -97,6 +97,8 @@ def create_dataframe(platform):
         columns += [algo, f"{algo} T"]
     df = pd.DataFrame(columns=columns, index=ego_ids)
 
+    print(df.columns)
+
     for num, ego_id in ego_ids_and_num:
         df.loc[ego_id, "|V|"] = num
         df.loc[ego_id, "|E|"] = len(load_ego_network(platform, ego_id))
@@ -113,6 +115,9 @@ def solve_preorder_ilp(platform, method="ILP"):
         if not np.isnan(df.loc[ego_id, method]) and (df.loc[ego_id, f"{method} Gap"] < 1e-3 or
                                                      df.loc[ego_id, f"{method} T"] >= t_limit):
             print(f"{method} solution for {i} {ego_id} already exists")
+            continue
+        if method != "Perodering" and df.loc[ego_id, "Preordering ILP Gap"] > 1e-3:
+            print("Preordering ILP Gap not zero")
             continue
 
         print(i, ego_id, df.loc[ego_id, "|V|"], end=" ")
@@ -192,6 +197,14 @@ def compute_lp_bounds(platform, ocw=False):
         if not np.isnan(df.loc[ego_id, f"{method}"]):
             print(f"{method} for {ego_id} already computed.")
             continue
+
+        if method == "LP+OCW" and df.loc[ego_id, f"LP T"] >= t_limit:
+            print("LP time already exceeded timelimit")
+            df.loc[ego_id, f"LP+OCW"] = df.loc[ego_id, f"LP"]
+            df.loc[ego_id, f"LP+OCW T"] = df.loc[ego_id, f"LP T"]
+            df.to_csv(filename)
+            continue
+
         print(i, ego_id, df.loc[ego_id, "|V|"], end=" ")
 
         edges = load_ego_network(platform, ego_id)
@@ -221,6 +234,9 @@ def solve_local_search(platform):
 
     for i, ego_id in enumerate(df.index):
         if df.loc[ego_id, "|V|"] == 0:
+            continue
+
+        if not np.any(df.loc[ego_id, ["GAI", "GDC", "GDC+GAI"]].isna()):
             continue
 
         edges = load_ego_network(platform, ego_id)

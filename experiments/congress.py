@@ -18,7 +18,7 @@ The party membership file is contained in the `data` directory.
 """
 
 
-data_root = "../../../../datasets/snap-stanford"
+data_root = "../data"
 
 
 colors = {

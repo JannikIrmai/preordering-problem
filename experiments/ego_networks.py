@@ -22,7 +22,7 @@ https://snap.stanford.edu/data/ego-Gplus.html
 """
 
 
-data_root = "../../../../datasets/snap-stanford"
+data_root = "../data"
 t_limit = 500
 max_num_nodes = np.inf
 

@@ -12,7 +12,7 @@ from preordering_problem.decompose_preorder import decompose_preorder
 
 
 """
-Preordering Twitter accounts of members of the 117 US congress.
+Preordering Twitter accounts of members of the 117th US Congress.
 The data can be downloaded from here: https://snap.stanford.edu/data/congress-twitter.html 
 The party membership file is contained in the `data` directory.
 """

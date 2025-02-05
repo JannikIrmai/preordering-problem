@@ -171,3 +171,8 @@ cython_debug/
 .pypirc
 
 results/
+
+data/*
+!data/congress_network
+data/congress_network/*
+!data/congress_network/parties.txt

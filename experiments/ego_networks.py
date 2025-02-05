@@ -107,32 +107,28 @@ def create_dataframe(platform):
 
 
 def solve_preorder_ilp(platform, method="ILP"):
-
+    print("Solving", method)
     filename = f"results/{platform}.csv"
     df = pd.read_csv(filename, index_col=0)
 
     for i, ego_id in enumerate(df.index):
         if not np.isnan(df.loc[ego_id, method]) and (df.loc[ego_id, f"{method} Gap"] < 1e-3 or
                                                      df.loc[ego_id, f"{method} T"] >= t_limit):
-            print(f"{method} solution for {i} {ego_id} already exists")
             continue
         if method != "Perodering" and df.loc[ego_id, "Preordering ILP Gap"] > 1e-3:
-            print("Preordering ILP Gap not zero")
             continue
 
-        print(i, ego_id, df.loc[ego_id, "|V|"], end=" ")
+        if method == "Successive ILPs" and not df.loc[ego_id, "Clustering ILP Gap"] <= 1e-3:
+            continue
+
+        print("\r", i, ego_id, df.loc[ego_id, "|V|"], end=" ")
 
         edges = load_ego_network(platform, ego_id)
         adjacency, nodes = edges_to_adjacency(edges)
         cost = - np.ones_like(adjacency) + 2*adjacency
         cost[np.diag_indices_from(cost)] = 0
 
-        preorder = Preorder(cost, binary=True, suppress_log=True)
-
         if method == "Successive ILPs":
-            if not df.loc[ego_id, "Clustering ILP Gap"] <= 1e-3:
-                print(f"Clustering for {i}, {ego_id} not solved yet.")
-                continue
             t_0 = time()
             # Step 1: solve clustering
             clustering = Preorder(cost, binary=True, suppress_log=True)
@@ -158,6 +154,7 @@ def solve_preorder_ilp(platform, method="ILP"):
             t = time() - t_0
             gap = 0
         else:
+            preorder = Preorder(cost, binary=True, suppress_log=True)
             if method == "Preordering ILP":
                 gdc_obj, gdc_sol = greedy_di_cut(cost)
                 gdc_ga_obj, gdc_ga_sol = greedy_arc_insertion(torch.Tensor(cost), torch.Tensor(gdc_sol))
@@ -185,27 +182,27 @@ def solve_preorder_ilp(platform, method="ILP"):
         df.loc[ego_id, f"{method}"] = obj
         df.loc[ego_id, f"{method} T"] = t
         df.loc[ego_id, f"{method} Gap"] = gap
-        print(obj, t, gap)
+        print(obj, t, gap, end=" ")
         df.to_csv(filename)
+    print()
 
 
 def compute_lp_bounds(platform, ocw=False):
+    print(f"Computing LP bounds (OCW = {ocw})")
     filename = f"results/{platform}.csv"
     method = "LP+OCW" if ocw else "LP"
     df = pd.read_csv(filename, index_col=0)
     for i, ego_id in enumerate(df.index):
         if not np.isnan(df.loc[ego_id, f"{method}"]):
-            print(f"{method} for {ego_id} already computed.")
             continue
 
         if method == "LP+OCW" and df.loc[ego_id, f"LP T"] >= t_limit:
-            print("LP time already exceeded timelimit")
             df.loc[ego_id, f"LP+OCW"] = df.loc[ego_id, f"LP"]
             df.loc[ego_id, f"LP+OCW T"] = df.loc[ego_id, f"LP T"]
             df.to_csv(filename)
             continue
 
-        print(i, ego_id, df.loc[ego_id, "|V|"], end=" ")
+        print("\r", i, ego_id, df.loc[ego_id, "|V|"], end=" ")
 
         edges = load_ego_network(platform, ego_id)
         adjacency, _ = edges_to_adjacency(edges)
@@ -224,13 +221,16 @@ def compute_lp_bounds(platform, ocw=False):
             raise ValueError("Negative bound!!")
         df.loc[ego_id, f"{method}"] = obj
         df.loc[ego_id, f"{method} T"] = t
-        print(obj, t)
+        print(obj, t, end="")
         df.to_csv(filename)
+    print()
 
 
 def solve_local_search(platform):
     filename = f"results/{platform}.csv"
     df = pd.read_csv(filename, index_col=0)
+
+    print("Performing local search")
 
     for i, ego_id in enumerate(df.index):
         if df.loc[ego_id, "|V|"] == 0:
@@ -238,6 +238,8 @@ def solve_local_search(platform):
 
         if not np.any(df.loc[ego_id, ["GAI", "GDC", "GDC+GAI"]].isna()):
             continue
+
+        print("\r", i, ego_id, end=" ")
 
         edges = load_ego_network(platform, ego_id)
         adjacency, _ = edges_to_adjacency(edges)
@@ -252,6 +254,7 @@ def solve_local_search(platform):
             ga_obj = int(ga_obj.item())
             df.loc[ego_id, "GAI"] = ga_obj
             df.loc[ego_id, "GAI T"] = t
+            print("GAI", ga_obj, t, end=" ")
 
         if np.isnan(df.loc[ego_id, "GDC"]):
             t_0 = time()
@@ -260,6 +263,7 @@ def solve_local_search(platform):
             df.loc[ego_id, "GDC T"] = t
             gdc_obj = int(gdc_obj)
             df.loc[ego_id, "GDC"] = gdc_obj
+            print("GDC", gdc_obj, t, end=" ")
 
         if np.isnan(df.loc[ego_id, "GDC+GAI"]):
             t_0 = time()
@@ -267,10 +271,13 @@ def solve_local_search(platform):
             gdc_adjacency = torch.Tensor(gdc_adjacency).to("cuda")
             combined_obj, adjacency = greedy_arc_insertion(costs_torch, gdc_adjacency)
             t = time() - t_0
-            df.loc[ego_id, "GDC+GAI"] = int(combined_obj.item())
+            combined_obj = int(combined_obj.item())
+            df.loc[ego_id, "GDC+GAI"] = combined_obj
             df.loc[ego_id, "GDC+GAI T"] = t
+            print("GDC", combined_obj, t, end=" ")
 
         df.to_csv(filename)
+    print()
 
 
 def plot_ego_network_results(platform, ego_id):

@@ -116,7 +116,7 @@ def solve_preorder_ilp(platform, method="ILP"):
                                                      df.loc[ego_id, f"{method} T"] >= t_limit):
             continue
         if method != "Perodering" and df.loc[ego_id, "Preordering ILP Gap"] > 1e-3:
-            continue
+            pass
 
         if method == "Successive ILPs" and not df.loc[ego_id, "Clustering ILP Gap"] <= 1e-3:
             continue
